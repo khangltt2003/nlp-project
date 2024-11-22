@@ -4,36 +4,35 @@ import os
 import string
 import requests
 import pandas as pd
-
-def load_special_words_and_reviews():
-    stopwords_list = requests.get("https://gist.githubusercontent.com/rg089/35e00abf8941d72d419224cfd5b5925d/raw/12d899b70156fd0041fa9778d657330b024b959c/stopwords.txt").content
-    return set(stopwords_list.decode().splitlines())
-
+from utils.preprocess import preprocess
 
 class Inverted_Index:
     def __init__(self):
         self.inverted_index = {} 
-    
+        self.map = {}
+        
     def generate_inverted_index(self):
         print("loading reviews")
-        review_df = pd.read_pickle("./../../reviews_segment.pkl")[["review_id", "review_text"]]
+        review_df = pd.read_pickle("./../../dataset/reviews_segment.pkl")[["review_id", "review_text"]]
       
         print("generating inverted index...")
-        table = str.maketrans({char: ' ' for char in string.punctuation if char != "'"})
-        print(table)
-        stopwords = load_special_words_and_reviews()
+        # table = str.maketrans({char: ' ' for char in string.punctuation if char != "'"})
+        # print(table)
+        # stopwords = load_special_words_and_reviews()
         count = 1
         for review in review_df.itertuples():
             if count % 10000 == 0:
                 print(f"processed {count} reviews...") 
             count += 1
             
-            #remove punctuations and lower
-            clean_review = review.review_text.translate(table).lower()
-
+            #preprocess review text
+            cleaned_review = preprocess(review.review_text)
+            
             review_id = review.review_id.replace("'", "") 
-            for key in clean_review.split():
-                if key in stopwords: continue
+            
+            self.map[review_id] = review.review_text
+            
+            for key in cleaned_review:
                 #key exist ?  get posting list : initialize empty set to key
                 #add review_id to key's posting list
                 self.inverted_index.setdefault(key, set()).add(review_id)
@@ -43,13 +42,12 @@ class Inverted_Index:
     
     #for words that not in inverted_index
     def add_to_inverted_index(self, words):
-        review_df = pd.read_pickle("./../../reviews_segment.pkl")[["review_id", "review_text"]]
-        table = str.maketrans({char: ' ' for char in string.punctuation if char != "'"})
+        review_df = pd.read_pickle("./../../dataset/reviews_segment.pkl")[["review_id", "review_text"]]
       
         for review in review_df.itertuples():
-            cleaned_text = review.review_text.translate(table).lower()
+            cleaned_text = preprocess(review.review_text)
             
-            for key in cleaned_text.split():
+            for key in cleaned_text:
                 if key not in words: continue
                 
                 review_id = review.review_id.replace("'", "")
@@ -86,19 +84,20 @@ class Inverted_Index:
             else:
                 j+= 1
         
-        return set(answer)
+        return answer
 
     def OR_operation(self, l1, l2):
         l1 = list(l1)
         l2 = list(l2)
-        return set(l1+l2)
+        return list(set(l1+l2))
     
     #a1 or a2 or o
     def method1(self, a1, a2, o):
         print(f"perform boolean search for query: '{a1}' or '{a2}' or '{o}'")
         self.check_and_generate([a1, a2, o])
         res =  self.OR_operation(self.OR_operation(self.inverted_index[a1], self.inverted_index[a2]), self.inverted_index[o])
-        self.save_query_res(a1, a2, o, "method1", res)
+        self.save_print_query_res(a1, a2, o, "method1", res)
+        res = [{"review_id" : id, "review_text" : self.map[id]} for id in res]
         return res
 
     #a1 and a2 and o
@@ -106,7 +105,8 @@ class Inverted_Index:
         print(f"perform boolean search for query: '{a1}' and '{a2}' and '{o}'")
         self.check_and_generate([a1, a2, o])
         res =  self.AND_operation(self.AND_operation(self.inverted_index[a1], self.inverted_index[a2]), self.inverted_index[o])
-        self.save_query_res(a1, a2, o, "method2", res)
+        self.save_print_query_res(a1, a2, o, "method2", res)
+        res = [{"review_id" :id, "review_text" : self.map[id]} for id in res]
         return res
         
         
@@ -115,25 +115,34 @@ class Inverted_Index:
         print(f"perform boolean search for query: '{a1}' or '{a2}' and '{o}'")
         self.check_and_generate([a1, a2, o])
         res =  self.AND_operation(self.OR_operation(self.inverted_index[a1], self.inverted_index[a2]), self.inverted_index[o])
-        self.save_query_res(a1, a2, o, "method3", res)
+        self.save_print_query_res(a1, a2, o, "method3", res)
+        res = [{"review_id" :id, "review_text" : self.map[id]} for id in res]
         return res
         
         
     def load(self):
         if(os.path.exists("./../output/posting_lists.pkl")):
+            # get posting list
             with open('./../output/posting_lists.pkl', 'rb') as file:
                 json_data = pickle.load(file)
                 self.inverted_index = json.loads(json_data)
+            
+            #get review id and review text
+            review_df = pd.read_pickle("./../../dataset/reviews_segment.pkl")[["review_id", "review_text"]]
+            for review in review_df.itertuples():
+                review_id = review.review_id.replace("'", "")
+                self.map[review_id] = review.review_text
+            
         else:
             self.generate_inverted_index()
             
-    def save_query_res(self,a1, a2, o, m, res):
+    def save_print_query_res(self,a1, a2, o, m, res):
         revs = pd.DataFrame()
         revs["review_index"] = [r for r in res]
         print(revs)
-        path = f"../output/" + a1 + "_" + a2 + "_" + o + "_" + m + ".pkl"
-        print(f"saving result to {path}")
-        revs.to_pickle(path)
+        # path = f"../output/" + a1 + "_" + a2 + "_" + o + "_" + m + ".pkl"
+        # print(f"saving result to {path}")
+        # revs.to_pickle(path)
         print("done")
     
     def save(self):

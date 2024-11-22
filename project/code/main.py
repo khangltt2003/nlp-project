@@ -6,7 +6,6 @@ from inverted_index import Inverted_Index
 negative_words = []
 positive_words = []
 review_df = []
-
 def main():
     parser = argparse.ArgumentParser(description="Perform the boolean search.")
     
