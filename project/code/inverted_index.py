@@ -1,19 +1,17 @@
 import json
 import pickle
 import os
-import string
-import requests
 import pandas as pd
-from utils.preprocess import preprocess
+from preprocess import preprocess
 
-class Inverted_Index:
+class BooleanSearch:
     def __init__(self):
         self.inverted_index = {} 
         self.map = {}
         
     def generate_inverted_index(self):
         print("loading reviews")
-        review_df = pd.read_pickle("./../../dataset/reviews_segment.pkl")[["review_id", "review_text"]]
+        review_df = pd.read_pickle("./../preprocessed_data/processed_data.pkl")
       
         print("generating inverted index...")
         # table = str.maketrans({char: ' ' for char in string.punctuation if char != "'"})
@@ -25,10 +23,8 @@ class Inverted_Index:
                 print(f"processed {count} reviews...") 
             count += 1
             
-            #preprocess review text
-            cleaned_review = preprocess(review.review_text)
-            
-            review_id = review.review_id.replace("'", "") 
+            review_id = review.review_id
+            cleaned_review = review.review_text.split()
             
             self.map[review_id] = review.review_text
             
@@ -120,7 +116,7 @@ class Inverted_Index:
         return res
         
         
-    def load(self):
+    def setup(self):
         if(os.path.exists("./../output/posting_lists.pkl")):
             # get posting list
             with open('./../output/posting_lists.pkl', 'rb') as file:
@@ -132,7 +128,6 @@ class Inverted_Index:
             for review in review_df.itertuples():
                 review_id = review.review_id.replace("'", "")
                 self.map[review_id] = review.review_text
-            
         else:
             self.generate_inverted_index()
             
@@ -152,3 +147,10 @@ class Inverted_Index:
         with open('./../output/posting_lists.pkl', 'wb') as file:
             pickle.dump(json_data, file)
         print("Done")
+        
+    def search(self, query):
+        if len(query.split()) != 3:
+            print("cannot use boolean search with query len != 3")
+            return
+        a1, a2, o = query.split()
+        self.method2(a1, a2, o)
